@@ -259,11 +259,48 @@ class GraphModel(Graph):
 
     def validate_graph(self, for_run: bool = False):
         def sanitize(name):
-            return name.split("_#_")[0].split("_@_")[0].split("_$_")[0]
+            sanitized_name = name.split("_#_")[0].split("_@_")[0].split("_$_")[0]
+            if sanitized_name.startswith("tools_"):
+                return sanitized_name.split("_")[0]
+            return sanitized_name
+
+        # Validate smart decision maker nodes
+        smart_decision_maker_nodes = set()
+        smd_unique_tool_links = {}
+        agent_nodes = set()
+
+        for node in self.nodes:
+            # Smart decision maker nodes
+            if node.block_id == "3b191d9f-356f-482d-8238-ba04b6d18381":
+                smart_decision_maker_nodes.add(node.id)
+            # Agent nodes
+            elif node.block_id == "e189baac-8c20-45a1-94a7-55177ea42565":
+                agent_nodes.add(node.id)
 
         input_links = defaultdict(list)
+        tool_name_to_node = {}
+
         for link in self.links:
             input_links[link.sink_id].append(link)
+
+            if (
+                link.source_id in smart_decision_maker_nodes
+                and link.source_name.startswith("tools_")
+            ):
+                tool_name = link.source_name.split("_#_")[0]
+                if tool_name in tool_name_to_node:
+                    if tool_name_to_node[tool_name] != link.sink_id:
+                        raise ValueError(
+                            f"Tool name {tool_name} links to multiple nodes: {tool_name_to_node[tool_name]} and {link.sink_id}"
+                        )
+                else:
+                    tool_name_to_node[tool_name] = link.sink_id
+
+                smd_unique_tool_links[link.source_id] = set(link.sink_id)
+                if link.sink_id not in agent_nodes:
+                    raise ValueError(
+                        f"Smart decision maker node {link.source_id} cannot link to non-agent node {link.sink_id}"
+                    )
 
         # Nodes: required fields are filled or connected and dependencies are satisfied
         for node in self.nodes:
@@ -366,7 +403,7 @@ class GraphModel(Graph):
                         if block.block_type != BlockType.AGENT
                         else vals.get("input_schema", {}).get("properties", {}).keys()
                     )
-                if sanitized_name not in fields:
+                if sanitized_name not in fields and not name.startswith("tools_"):
                     fields_msg = f"Allowed fields: {fields}"
                     raise ValueError(f"{suffix}, `{name}` invalid, {fields_msg}")
 
@@ -527,6 +564,33 @@ async def get_execution(user_id: str, execution_id: str) -> GraphExecution | Non
         where={"id": execution_id, "userId": user_id}
     )
     return GraphExecution.from_db(execution) if execution else None
+
+
+async def get_graph_metadata(graph_id: str, version: int | None = None) -> Graph | None:
+    where_clause: AgentGraphWhereInput = {
+        "id": graph_id,
+    }
+
+    if version is not None:
+        where_clause["version"] = version
+
+    graph = await AgentGraph.prisma().find_first(
+        where=where_clause,
+        include=AGENT_GRAPH_INCLUDE,
+        order={"version": "desc"},
+    )
+
+    if not graph:
+        return None
+
+    return Graph(
+        id=graph.id,
+        name=graph.name or "",
+        description=graph.description or "",
+        version=graph.version,
+        is_active=graph.isActive,
+        is_template=graph.isTemplate,
+    )
 
 
 async def get_graph(
