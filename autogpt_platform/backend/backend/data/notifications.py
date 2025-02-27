@@ -53,6 +53,7 @@ class LowBalanceData(BaseNotificationData):
     threshold_amount: float
     top_up_link: str
     recent_usage: float = Field(..., description="Usage in the last 24 hours")
+    shortfall: float = Field(..., description="Amount of credits needed to continue")
 
 
 class BlockExecutionFailedData(BaseNotificationData):
@@ -197,7 +198,7 @@ class NotificationTypeOverride:
             NotificationType.AGENT_RUN: QueueType.IMMEDIATE,
             # These are batched by the notification service, but with a backoff strategy
             NotificationType.ZERO_BALANCE: QueueType.BACKOFF,
-            NotificationType.LOW_BALANCE: QueueType.BACKOFF,
+            NotificationType.LOW_BALANCE: QueueType.IMMEDIATE,
             NotificationType.BLOCK_EXECUTION_FAILED: QueueType.BACKOFF,
             NotificationType.CONTINUOUS_AGENT_ERROR: QueueType.BACKOFF,
             NotificationType.DAILY_SUMMARY: QueueType.DAILY,

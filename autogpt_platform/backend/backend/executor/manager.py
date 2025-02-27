@@ -15,6 +15,7 @@ from redis.lock import Lock as RedisLock
 from backend.blocks.basic import AgentOutputBlock
 from backend.data.notifications import (
     AgentRunData,
+    LowBalanceData,
     NotificationEventDTO,
     NotificationType,
 )
@@ -580,6 +581,25 @@ class Executor:
                 log_metadata.info(
                     f"Failed node execution {node_exec.node_exec_id}: {e}"
                 )
+                if (
+                    len(e.args) == 2
+                    and "type" in e.args[1]
+                    and e.args[1]["type"] == "low_balance"
+                ):
+
+                    cls.notification_service.queue_notification(
+                        NotificationEventDTO(
+                            user_id=node_exec.user_id,
+                            type=NotificationType.LOW_BALANCE,
+                            data=LowBalanceData(
+                                current_balance=stats["cost"] if stats else 0,
+                                threshold_amount=0,
+                                top_up_link="test",
+                                recent_usage=0,
+                                shortfall=e.args[1]["balance"] - e.args[1]["amount"],
+                            ).model_dump(),
+                        )
+                    )
             else:
                 log_metadata.exception(
                     f"Failed node execution {node_exec.node_exec_id}: {e}"
