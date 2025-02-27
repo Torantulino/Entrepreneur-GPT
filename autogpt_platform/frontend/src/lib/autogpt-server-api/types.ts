@@ -60,6 +60,7 @@ export type BlockIOSubSchemaMeta = {
   advanced?: boolean;
   depends_on?: string[];
   hidden?: boolean;
+  default?: any;
 };
 
 export type BlockIOObjectSubSchema = BlockIOSubSchemaMeta & {
@@ -725,6 +726,17 @@ export interface RefundRequest {
   status: string;
   created_at: Date;
   updated_at: Date;
+}
+
+export interface UserOnboarding {
+  step: number;
+  usageReason?: string;
+  integrations: string[];
+  otherIntegrations?: string;
+  selectedAgentCreator?: string;
+  selectedAgentSlug?: string;
+  agentInput?: { [key: string]: string };
+  isCompleted: boolean;
 }
 
 /* *** UTILITIES *** */
